@@ -1,0 +1,10 @@
+{
+  "name": "slack-bot-example",
+  "version": "1.0.0",
+  "dependencies": {},
+  "author": "Hideki Ikemoto",
+  "license": "MIT",
+  "devDependencies": {
+    "serverless-domain-manager": "^2.6.11"
+  }
+}

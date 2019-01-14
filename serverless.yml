@@ -1,0 +1,127 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: slack-bot-example
+
+plugins:
+  - serverless-domain-manager
+
+provider:
+  name: aws
+  runtime: ruby2.5
+  memorySize: 128
+  timeout: 10
+  profile: sls
+  stage: ${opt:stage, 'dev'}
+  region: ap-northeast-1 # change it.
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "logs:CreateLogGroup"
+        - "logs:CreateLogStream"
+        - "logs:PutLogEvents"
+      Resource: "arn:aws:logs:*:*:*"
+    - Effect: "Allow"
+      Action:
+        - "sns:*"
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource: ${self:custom.dynamodb_arn}
+
+custom:
+  account: "012345678901"
+  sns_topic: slack-bot-example-mention-${self:provider.stage}
+  dynamodb_table_name: slack-bot-example-token-${self:provider.stage}
+  dynamodb_arn: "arn:aws:dynamodb:${self:provider.region}:${self:custom.account}:table/${self:custom.dynamodb_table_name}"
+  env:
+    dev:
+      domainName: slack-bot-example-dev.example.com # change it.
+      redirect_uri: https://${self:custom.env.dev.domainName}/callback
+      client_id: "00000000000.000000000000" # change it.
+      client_secret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # change it.
+      signing_secret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # change it.
+      oauth_denied_url: "https://slack-bot-example-dev.example.com/denied/" # change it.
+      oauth_registered_url: "https://slack-bot-example-dev.example.com/registered/" # change it.
+    prod:
+      domainName: slack-bot-example.example.com # change it.
+      redirect_uri: https://${self:custom.env.prod.domainName}/callback
+      client_id: "00000000000.000000000000" # change it.
+      client_secret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # change it.
+      signing_secret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # change it.
+      oauth_denied_url: "https://slack-bot-example.example.com/denied/" # change it.
+      oauth_registered_url: "https://slack-bot-example.example.com/registered/" # change it.
+  customDomain:
+    domainName: ${self:custom.env.${self:provider.stage}.domainName}
+    basePath: ''
+    stage: ${self:provider.stage}
+    createRoute53Record: true
+    endpointType: regional # change it.
+
+functions:
+  authorize_redirect:
+    handler: authorize_redirect.authorize
+    environment:
+      CLIENT_ID: ${self:custom.env.${self:provider.stage}.client_id}
+      SCOPE: "bot"
+      REDIRECT_URI: ${self:custom.env.${self:provider.stage}.redirect_uri}
+    events:
+      - http:
+          path: authorize_redirect
+          method: GET
+  callback:
+    handler: callback.oauth2_callback_handler
+    environment:
+      CLIENT_ID: ${self:custom.env.${self:provider.stage}.client_id}
+      CLIENT_SECRET: ${self:custom.env.${self:provider.stage}.client_secret}
+      REDIRECT_URI: ${self:custom.env.${self:provider.stage}.redirect_uri} 
+      DYNAMODB_TABLE_NAME: ${self:custom.dynamodb_table_name}
+      REGISTERED_URL: ${self:custom.env.${self:provider.stage}.oauth_registered_url}
+      DENIED_URL: ${self:custom.env.${self:provider.stage}.oauth_denied_url}
+    events:
+      - http:
+          path: callback
+          method: GET
+  event:
+    handler: event.slack_event_handler
+    environment:
+      TOPIC_ARN: arn:aws:sns:ap-northeast-1:${self:custom.account}:${self:custom.sns_topic}
+      SIGNING_SECRET: ${self:custom.env.${self:provider.stage}.signing_secret}
+    events:
+      - http:
+          path: event
+          method: POST
+  reply:
+    handler: reply.slack_reply_handler
+    environment:
+      DYNAMODB_TABLE_NAME: ${self:custom.dynamodb_table_name}
+    events:
+      - sns: ${self:custom.sns_topic}
+
+resources:
+  Resources:
+    TokenTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        TableName: "${self:custom.dynamodb_table_name}"
+        AttributeDefinitions:
+          - AttributeName: team_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: team_id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
