@@ -77,8 +77,8 @@ def slack_event_handler(event:, context:)
 
     event_type = event['type']
     if event_type != "app_mention"
-        puts "event param #{type} is not supported"
-        return { statusCode: 400, body: "event param #{type} is not supported" }
+        puts "event param #{event_type} is not supported"
+        return { statusCode: 400, body: "event param #{event_type} is not supported" }
     end
 
     publish(params)
